@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator - Front/Back End Separation</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h2>Calculator <span class="sub">(computed on the back end)</span></h2>
+
+    <input id="exprInput" type="text" placeholder="Input expression, e.g. (1+2)*3.5" autofocus>
+
+    <div class="btn-grid">
+        <button onclick="appendChar('(')">(</button>
+        <button onclick="appendChar(')')">)</button>
+        <button onclick="appendChar('/')">/</button>
+        <button onclick="appendChar('*')">*</button>
+        <button onclick="appendChar('7')">7</button>
+        <button onclick="appendChar('8')">8</button>
+        <button onclick="appendChar('9')">9</button>
+        <button onclick="appendChar('-')">-</button>
+        <button onclick="appendChar('4')">4</button>
+        <button onclick="appendChar('5')">5</button>
+        <button onclick="appendChar('6')">6</button>
+        <button onclick="appendChar('+')">+</button>
+        <button onclick="appendChar('1')">1</button>
+        <button onclick="appendChar('2')">2</button>
+        <button onclick="appendChar('3')">3</button>
+        <button onclick="appendChar('.')">.</button>
+        <button onclick="appendChar('0')">0</button>
+        <button onclick="clearInput()">C</button>
+        <button class="equals" onclick="submitCalc()">=</button>
+    </div>
+
+    <div class="result-box">Result: <span id="resultText"></span></div>
+
+    <div class="history-header">
+        <h3>Calculation History</h3>
+        <button id="clearAllBtn" onclick="clearAllHistory()">Clear All</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+</div>
+
+<script>
+const input = document.getElementById('exprInput');
+const resultText = document.getElementById('resultText');
+const historyList = document.getElementById('historyList');
+
+function appendChar(c) {
+    input.value += c;
+    input.focus();
+}
+
+function clearInput() {
+    input.value = '';
+    resultText.innerText = '';
+}
+
+// Send expression to the back end for calculation
+async function submitCalc() {
+    const expr = input.value.trim();
+    if (!expr) return;
+    try {
+        const res = await fetch('/api/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: expr })
+        });
+        const data = await res.json();
+        if (data.success) {
+            resultText.innerText = data.result;
+            input.value = '';
+        } else {
+            resultText.innerText = 'Error: ' + data.msg;
+        }
+    } catch (e) {
+        resultText.innerText = 'Error: cannot connect to server';
+    }
+    loadHistory();
+}
+
+// Load and render history from the back end database
+async function loadHistory() {
+    try {
+        const res = await fetch('/api/history');
+        const hist = await res.json();
+        historyList.innerHTML = '';
+        if (hist.length === 0) {
+            historyList.innerHTML = '<p class="empty">No history yet.</p>';
+            return;
+        }
+        hist.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.innerHTML = '<span class="expr">' + escapeHtml(item.expr) + ' = <b>' + escapeHtml(item.result) + '</b></span>' +
+                '<span class="time">' + item.time + '</span>' +
+                '<button class="del" onclick="deleteHist(' + item.id + ')">Delete</button>';
+            historyList.appendChild(div);
+        });
+    } catch (e) {
+        historyList.innerHTML = '<p class="empty">Cannot load history.</p>';
+    }
+}
+
+// Delete one history record by ID (back end really deletes it)
+async function deleteHist(id) {
+    await fetch('/api/history/' + id, { method: 'DELETE' });
+    loadHistory();
+}
+
+// Extended feature: clear all history
+async function clearAllHistory() {
+    await fetch('/api/history', { method: 'DELETE' });
+    resultText.innerText = '';
+    loadHistory();
+}
+
+// Extended feature: keyboard shortcuts
+input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        submitCalc();
+    } else if (e.key === 'Escape') {
+        clearInput();
+    }
+});
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+window.onload = loadHistory;
+</script>
+</body>
+</html>
